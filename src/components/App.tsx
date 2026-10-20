@@ -14,6 +14,8 @@ export function App() {
   const [items, setItems] = useState<Item[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [aiEnabled, setAiEnabled] = useState(true);
+  const [seeded, setSeeded] = useState(true);
+  const [seeding, setSeeding] = useState(false);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab>("chat");
@@ -28,6 +30,7 @@ export function App() {
     setItems(data.items);
     setSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
     setAiEnabled(Boolean(data.aiEnabled));
+    setSeeded(data.seeded !== false);
   }, []);
 
   useEffect(() => {
@@ -76,6 +79,13 @@ export function App() {
     if (data.taskId) setSelectedId(data.taskId);
   }
 
+  async function seed() {
+    setSeeding(true);
+    await fetch("/api/seed", { method: "POST" }).catch(() => null);
+    setSeeding(false);
+    refresh();
+  }
+
   const select = (id: number) => {
     setSelectedId(id);
     setTab("chat");
@@ -104,6 +114,8 @@ export function App() {
             onDelete={remove}
             itemsById={itemsById}
             aiEnabled={aiEnabled}
+            onSeed={seeded ? null : seed}
+            seeding={seeding}
           />
         </section>
       </main>

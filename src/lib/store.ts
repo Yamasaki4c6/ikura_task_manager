@@ -3,6 +3,7 @@ import { db, dbConfigError } from "./db";
 import { itemTags, items, suggestions, tags, type Status } from "./schema";
 import { classify, link, type ClassifiedItem } from "./ai";
 import { todayJST } from "./dates";
+import { SEED_SOURCE, seeds } from "./seed-data";
 
 let ready: Promise<void> | null = null;
 // 初回アクセス時にテーブルを作る。スキーマが育ってきたら drizzle-kit のマイグレーションに移す
@@ -188,3 +189,17 @@ export async function deleteItem(id: number) {
   await db.delete(items).where(inArray(items.id, ids));
 }
 
+
+// 初期タスクが入っているか。入っていれば画面のボタンを出さない
+export async function isSeeded() {
+  await ensureSchema();
+  const [row] = await db.select({ id: items.id }).from(items).where(eq(items.sourceText, SEED_SOURCE)).limit(1);
+  return Boolean(row);
+}
+
+// 初期タスクを足す。既にある項目は消さない。二重に入らないよう、入っていれば何もしない
+export async function seedInitial() {
+  if (await isSeeded()) return 0;
+  for (const s of seeds) await insertItem(s, { sourceText: SEED_SOURCE });
+  return seeds.length;
+}

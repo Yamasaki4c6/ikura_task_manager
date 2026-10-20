@@ -16,6 +16,8 @@ export function Chat({
   onDelete,
   itemsById,
   aiEnabled,
+  onSeed,
+  seeding,
 }: {
   log: LogEntry[];
   onDump: (text: string) => void;
@@ -27,6 +29,8 @@ export function Chat({
   onDelete: (id: number) => void;
   itemsById: Map<number, Item>;
   aiEnabled: boolean;
+  onSeed: (() => void) | null;
+  seeding: boolean;
 }) {
   const [text, setText] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
@@ -94,6 +98,15 @@ export function Chat({
           </p>
         )}
         {log.length === 0 && <p className="text-neutral-400">思いついたことを、そのまま投げ込んでください。</p>}
+        {onSeed && (
+          <button
+            onClick={onSeed}
+            disabled={seeding}
+            className="rounded border border-neutral-300 px-3 py-1.5 text-xs disabled:opacity-50 dark:border-neutral-700"
+          >
+            {seeding ? "入れています…" : "初期タスク（31件）を入れる"}
+          </button>
+        )}
         {log.map((e) => (
           <div key={e.id}>
             <div className="ml-auto w-fit max-w-[90%] whitespace-pre-wrap rounded-lg bg-neutral-100 px-3 py-1.5 dark:bg-neutral-800">{e.text}</div>
