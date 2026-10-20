@@ -85,7 +85,7 @@ export function App() {
 
   return (
     <div className="flex h-dvh flex-col">
-      <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[2fr_1fr_1fr] md:divide-x md:divide-neutral-200 dark:md:divide-neutral-800">
+      <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] md:divide-x md:divide-neutral-200 dark:md:divide-neutral-800">
         <section className={pane("calendar")}>
           {today && <Calendar items={items} today={today} onSelect={select} />}
         </section>
