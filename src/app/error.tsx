@@ -8,6 +8,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
       <pre className="whitespace-pre-wrap rounded bg-neutral-100 p-2 text-xs dark:bg-neutral-800">
         {error.message}
         {error.digest ? `\n(digest: ${error.digest})` : ""}
+        {error.stack ? `\n\n${error.stack.split("\n").slice(0, 8).join("\n")}` : ""}
       </pre>
       <button onClick={reset} className="mt-3 rounded bg-neutral-900 px-3 py-1.5 text-white dark:bg-neutral-100 dark:text-neutral-900">
         もう一度
