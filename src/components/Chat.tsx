@@ -30,7 +30,11 @@ export function Chat({
 }) {
   const [text, setText] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
-  useEffect(() => bottom.current?.scrollIntoView({ block: "end" }), [log]);
+  // 波括弧で包んで何も返さない。新しい Chrome では scrollIntoView が Promise を返し、
+  // それを React が後片付け関数として呼んで「i is not a function」で落ちていた
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: "end" });
+  }, [log]);
 
   const send = () => {
     if (!text.trim()) return;
