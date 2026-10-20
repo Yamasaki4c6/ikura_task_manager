@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 脳の拡張（タスク管理ツール）
 
-## Getting Started
+思いついたことを一つの入力欄に投げ込むと、AI が 願望／アイデア／予定／タスク に切り分け、フォルダ（就活／サークル／制作／学習／生活）とタグを付けて整理します。日付のある項目が入ると、手持ちの締切なしの素材と照合して「では〜しませんか？」と提案します。
 
-First, run the development server:
+仕様は `docs/` の3ファイル（仕様書・初期タスク一覧・設計判断ログ）を参照。迷ったら設計判断ログに立ち返る。
+
+## 手元で動かす
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # ANTHROPIC_API_KEY を入れると AI 分類になる
+npm run seed                 # 初期タスク一覧を投入
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 構成
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Next.js（App Router）＋ TypeScript ＋ Tailwind。PC は3ペイン、スマホはタブ切り替え
+- DB: libSQL（本番は Turso、手元は `local.db`）を Drizzle で扱う
+- AI: Claude API（`src/lib/ai.ts`）。分類と接続の2つの呼び出し。キー未設定時は `src/lib/heuristic.ts` の簡易版
+- `APP_PASSCODE` を設定すると、パスコードを知っている人だけが入れる
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 今あるもの（第1スライス）
 
-## Learn More
+- 投げ込み → AI 分類（種別・フォルダ・タグ・日付・繰り返し・優先度色・子タスク）
+- 日付つき項目の投入で、締切なしの素材との接続を提案（チャット欄の吹き出し）→ 採用でタスク化
+- カレンダー（月表示・優先度の色分け）、フォルダ別リスト（親の状態は子から算出）、項目のカテゴリ・締切・状態の編集
 
-To learn more about Next.js, take a look at the following resources:
+## まだないもの
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Google カレンダーへの書き込み（専用カレンダー・色分け）
+- 項目を選んでの個別対話、再配置、棚卸し、タグのリファクタリング、外部情報の持ち込み
