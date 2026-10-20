@@ -12,5 +12,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!login|api/login|_next/|favicon.ico).*)"],
+  // アイコンとマニフェストはブラウザがログイン情報なしで取りに来るので、鍵の外に置く
+  matcher: ["/((?!login|api/login|_next/|favicon.ico|manifest.webmanifest|icon-|apple-icon).*)"],
 };
