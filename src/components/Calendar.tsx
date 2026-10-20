@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { addDays, todayJST, weekday } from "@/lib/dates";
+import { addDays, weekday } from "@/lib/dates";
 import { PRIORITY_COLOR, type Item } from "./types";
 
 const WD = "日月火水木金土";
@@ -22,8 +22,7 @@ function onDay(item: Item, day: string) {
 
 const isSpan = (it: Item) => Boolean(it.startDate && it.dueDate && it.startDate !== it.dueDate && !it.recurrence);
 
-export function Calendar({ items, onSelect }: { items: Item[]; onSelect: (id: number) => void }) {
-  const today = todayJST();
+export function Calendar({ items, today, onSelect }: { items: Item[]; today: string; onSelect: (id: number) => void }) {
   const [month, setMonth] = useState(today.slice(0, 7));
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 
