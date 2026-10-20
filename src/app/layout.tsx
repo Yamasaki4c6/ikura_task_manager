@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "脳の拡張",
   description: "投げ込むだけで整理・接続してくれるタスク管理",
+  appleWebApp: { capable: true, title: "脳の拡張", statusBarStyle: "default" },
+};
+
+// スマホで入力欄にフォーカスしたとき勝手に拡大されないよう、また上部バーの色を揃える
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#171717",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
