@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { db } from "./db";
+import { db, dbConfigError } from "./db";
 import { itemTags, items, suggestions, tags, type Status } from "./schema";
 import { classify, link, type ClassifiedItem } from "./ai";
 import { todayJST } from "./dates";
@@ -8,6 +8,7 @@ let ready: Promise<void> | null = null;
 // 初回アクセス時にテーブルを作る。スキーマが育ってきたら drizzle-kit のマイグレーションに移す
 export function ensureSchema() {
   ready ??= (async () => {
+    if (dbConfigError) throw new Error(dbConfigError);
     await db.run(sql`CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, note TEXT, kind TEXT NOT NULL, folder TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT '未着手', parent_id INTEGER, start_date TEXT, due_date TEXT, recurrence TEXT,
@@ -17,7 +18,10 @@ export function ensureSchema() {
     await db.run(sql`CREATE TABLE IF NOT EXISTS suggestions (
       id INTEGER PRIMARY KEY AUTOINCREMENT, anchor_id INTEGER NOT NULL, material_ids TEXT NOT NULL, message TEXT NOT NULL,
       task_title TEXT NOT NULL, due_date TEXT, steps TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)`);
-  })();
+  })().catch((e) => {
+    ready = null; // 失敗した初期化を覚え続けず、次のリクエストでやり直す
+    throw e;
+  });
   return ready;
 }
 

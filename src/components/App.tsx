@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { todayJST } from "@/lib/dates";
 import type { Status } from "@/lib/schema";
 import { Calendar } from "./Calendar";
 import { Chat, type LogEntry } from "./Chat";
@@ -16,18 +17,22 @@ export function App() {
   const [log, setLog] = useState<LogEntry[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab>("chat");
+  // 「今日」はブラウザで決める。サーバー側で描かせるとプリレンダーと食い違う
+  const [today, setToday] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const res = await fetch("/api/items");
-    if (!res.ok) return;
-    const data = await res.json();
+    const res = await fetch("/api/items", { cache: "no-store" }).catch(() => null);
+    if (!res?.ok) return;
+    const data = await res.json().catch(() => null);
+    if (!Array.isArray(data?.items)) return;
     setItems(data.items);
-    setSuggestions(data.suggestions);
-    setAiEnabled(data.aiEnabled);
+    setSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
+    setAiEnabled(Boolean(data.aiEnabled));
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 初回読み込み
+    setToday(todayJST());
     refresh();
   }, [refresh]);
 
@@ -37,12 +42,12 @@ export function App() {
   async function dump(text: string) {
     const id = Date.now();
     setLog((l) => [...l, { id, text, pending: true }]);
-    const res = await fetch("/api/dump", { method: "POST", body: JSON.stringify({ text }) });
-    const data = await res.json().catch(() => ({}));
+    const res = await fetch("/api/dump", { method: "POST", body: JSON.stringify({ text }) }).catch(() => null);
+    const data = (await res?.json().catch(() => null)) ?? {};
     setLog((l) =>
       l.map((e) =>
         e.id === id
-          ? res.ok
+          ? res?.ok && typeof data.reply === "string"
             ? { id, text, reply: data.reply + (data.suggestions?.length ? "　💡提案があります" : "") }
             : { id, text, reply: data.error ?? "失敗しました", error: true }
           : e,
@@ -82,7 +87,7 @@ export function App() {
     <div className="flex h-dvh flex-col">
       <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[2fr_1fr_1fr] md:divide-x md:divide-neutral-200 dark:md:divide-neutral-800">
         <section className={pane("calendar")}>
-          <Calendar items={items} onSelect={select} />
+          {today && <Calendar items={items} today={today} onSelect={select} />}
         </section>
         <section className={pane("list")}>
           <TaskList items={items} selectedId={selectedId} onSelect={select} onStatus={(id, status) => patch(id, { status })} />
