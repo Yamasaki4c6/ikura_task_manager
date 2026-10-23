@@ -18,12 +18,14 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "VertexPilot", statusBarStyle: "default" },
 };
 
-// スマホで入力欄にフォーカスしたとき勝手に拡大されないよう、また上部バーの色を揃える
+// スマホで入力欄にフォーカスしたとき勝手に拡大されないよう、また上部バーの色を揃える。
+// キーボードが出たら画面の高さごと縮め、入力欄がキーボードの上に残るようにする（Android Chrome）
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   themeColor: "#171717",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

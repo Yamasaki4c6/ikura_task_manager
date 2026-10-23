@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 
-// 投げ込み欄と相談チャットで共通の入力欄
+// 投げ込み欄と相談チャットで共通の入力欄。Enter は改行で、送信は「送る」ボタンだけ（誤送信を防ぐ）
 export function Composer({ onSend, placeholder, disabled }: { onSend: (text: string) => void; placeholder: string; disabled?: boolean }) {
   const [text, setText] = useState("");
   const send = () => {
@@ -14,17 +14,11 @@ export function Composer({ onSend, placeholder, disabled }: { onSend: (text: str
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            send();
-          }
-        }}
         rows={2}
+        enterKeyHint="enter"
         placeholder={placeholder}
         className="min-w-0 flex-1 resize-none rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-base outline-none focus:border-neutral-500 md:text-sm dark:border-neutral-700"
       />
-      {/* スマホのキーボードでは Enter が改行・変換確定になりがちなので、送るボタンも置く */}
       <button
         onClick={send}
         disabled={!text.trim() || disabled}

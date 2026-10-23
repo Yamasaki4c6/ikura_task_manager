@@ -25,6 +25,7 @@ export function App() {
   // 「今日」はブラウザで決める。サーバー側で描かせるとプリレンダーと食い違う
   const [today, setToday] = useState<string | null>(null);
   const panes = useRef<HTMLElement>(null);
+  const keyboard = useKeyboard();
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/items", { cache: "no-store" }).catch(() => null);
@@ -99,7 +100,7 @@ export function App() {
   }
 
   return (
-    <div className="flex h-dvh flex-col">
+    <div className="flex h-dvh flex-col" style={keyboard.height ? { height: keyboard.height } : undefined}>
       <main
         ref={panes}
         onScroll={(e) => setTab(Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth))}
@@ -128,8 +129,8 @@ export function App() {
           )}
         </section>
       </main>
-      <Suggestions suggestions={suggestions} itemsById={itemsById} onResolve={resolve} />
-      <nav className="relative grid grid-cols-3 border-t border-neutral-200 pb-[env(safe-area-inset-bottom)] md:hidden dark:border-neutral-800">
+      {!keyboard.open && <Suggestions suggestions={suggestions} itemsById={itemsById} onResolve={resolve} />}
+      <nav className={`relative grid-cols-3 border-t border-neutral-200 pb-[env(safe-area-inset-bottom)] md:hidden dark:border-neutral-800 ${keyboard.open ? "hidden" : "grid"}`}>
         {TABS.map((label, i) => (
           <button key={label} onClick={() => goTab(i)} className={`py-3 text-sm ${tab === i ? "font-bold" : "text-neutral-500"}`}>
             {i === 2 && selected ? "相談" : label}
@@ -142,4 +143,28 @@ export function App() {
       </nav>
     </div>
   );
+}
+
+// キーボードが出ている間は、見えている範囲（visualViewport）に画面を合わせ、入力欄をキーボードの上に出す。
+// iOS Safari は画面の高さを縮めないので、ここで合わせる
+function useKeyboard() {
+  const [state, setState] = useState<{ height: number | null; open: boolean }>({ height: null, open: false });
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let full = vv.height;
+    let width = vv.width;
+    const update = () => {
+      // 画面を回したら基準の高さを取り直す
+      if (vv.width !== width) [full, width] = [vv.height, vv.width];
+      full = Math.max(full, vv.height);
+      const open = vv.height < full * 0.8;
+      setState({ height: open ? vv.height : null, open });
+      // iOS は入力欄へ寄せるためにページごと上へずらすので、元に戻す
+      if (open) window.scrollTo(0, 0);
+    };
+    vv.addEventListener("resize", update);
+    return () => vv.removeEventListener("resize", update);
+  }, []);
+  return state;
 }
