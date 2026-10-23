@@ -149,7 +149,6 @@ export function App() {
                   <Pet
                     items={items}
                     today={today}
-                    mood={todayDiary.mood}
                     wroteDiary={todayDiary.wrote}
                     onSelect={select}
                     onOpenDiary={() => setDiaryOpen(true)}
