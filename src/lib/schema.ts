@@ -26,6 +26,8 @@ export const items = sqliteTable("items", {
   // 例: "毎日" / "毎週月" など。null なら繰り返しなし
   recurrence: text("recurrence"),
   priority: text("priority").$type<Priority>().notNull().default("青"),
+  // カレンダーに載せるか。予定や「その日にやる」ものだけ。期間内のどこかでやればいいものは載せない
+  onCalendar: integer("on_calendar", { mode: "boolean" }).notNull().default(false),
   // 投げ込まれた原文
   sourceText: text("source_text"),
   // 接続で立ち上がったタスクの場合、元になった素材・予定の id（JSON 配列）
@@ -57,5 +59,14 @@ export const suggestions = sqliteTable("suggestions", {
   dueDate: text("due_date"),
   steps: text("steps").notNull(),
   status: text("status").$type<"pending" | "accepted" | "dismissed">().notNull().default("pending"),
+  createdAt: text("created_at").notNull(),
+});
+
+// 投げ込み欄（itemId が null）と、項目ごとの相談チャットのやり取り
+export const messages = sqliteTable("messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  itemId: integer("item_id"),
+  role: text("role").$type<"user" | "assistant">().notNull(),
+  text: text("text").notNull(),
   createdAt: text("created_at").notNull(),
 });

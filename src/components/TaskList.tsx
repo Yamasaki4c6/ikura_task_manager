@@ -3,8 +3,8 @@ import { useState } from "react";
 import { FOLDERS, KINDS, type Status } from "@/lib/schema";
 import { KIND_STYLE, PRIORITY_COLOR, type Item } from "./types";
 
-const NEXT: Record<Status, Status> = { 未着手: "進行中", 進行中: "完了", 完了: "未着手" };
-const MARK: Record<Status, string> = { 未着手: "○", 進行中: "◐", 完了: "●" };
+// チェックで完了／未完了を切り替える。進行中は相談チャットの編集から
+const MARK: Record<Status, string> = { 未着手: "☐", 進行中: "◐", 完了: "☑" };
 
 export function TaskList({
   items,
@@ -28,8 +28,8 @@ export function TaskList({
         className={`flex items-start gap-1.5 rounded px-1 py-1 ${child ? "ml-5" : ""} ${selectedId === it.id ? "bg-neutral-100 dark:bg-neutral-800" : ""}`}
       >
         <button
-          onClick={() => !it.childIds.length && onStatus(it.id, NEXT[it.status])}
-          className={`w-4 shrink-0 ${it.childIds.length ? "cursor-default text-neutral-400" : ""}`}
+          onClick={() => !it.childIds.length && onStatus(it.id, it.status === "完了" ? "未着手" : "完了")}
+          className={`-my-1 w-6 shrink-0 py-1 text-base leading-5 ${it.childIds.length ? "cursor-default text-neutral-400" : ""}`}
           title={it.childIds.length ? `${it.status}（子から算出）` : it.status}
         >
           {MARK[it.status]}
@@ -38,7 +38,12 @@ export function TaskList({
           <span className={`mr-1 inline-block h-2 w-2 rounded-full ${PRIORITY_COLOR[it.priority]}`} />
           <span className={it.status === "完了" ? "text-neutral-400 line-through" : ""}>{it.title}</span>
           {!child && <span className={`ml-1 rounded px-1 text-[10px] ${KIND_STYLE[it.kind]}`}>{it.kind}</span>}
-          {it.dueDate && <span className="ml-1 text-[11px] text-neutral-500">{it.dueDate.slice(5).replace("-", "/")}</span>}
+          {it.dueDate && (
+            <span className="ml-1 text-[11px] text-neutral-500">
+              {it.onCalendar ? "📅" : "〆"}
+              {it.dueDate.slice(5).replace("-", "/")}
+            </span>
+          )}
           {it.recurrence && <span className="ml-1 text-[11px] text-green-700 dark:text-green-400">{it.recurrence}</span>}
           {it.tags.length > 0 && <span className="ml-1 text-[11px] text-neutral-400">#{it.tags.join(" #")}</span>}
         </button>

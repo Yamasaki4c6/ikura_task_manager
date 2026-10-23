@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, dbConfigError } from "./db";
-import { itemTags, items, suggestions, tags, type Status } from "./schema";
-import { classify, link, type ClassifiedItem } from "./ai";
+import { itemTags, items, messages, suggestions, tags, type Status } from "./schema";
+import { interpret, link, type ClassifiedItem, type Interpretation, type Known } from "./ai";
 import { todayJST } from "./dates";
 import { SEED_SOURCE, seeds } from "./seed-data";
 
@@ -19,6 +19,15 @@ export function ensureSchema() {
     await db.run(sql`CREATE TABLE IF NOT EXISTS suggestions (
       id INTEGER PRIMARY KEY AUTOINCREMENT, anchor_id INTEGER NOT NULL, material_ids TEXT NOT NULL, message TEXT NOT NULL,
       task_title TEXT NOT NULL, due_date TEXT, steps TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)`);
+    await db.run(sql`CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER, role TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL)`);
+    const cols = await db.all<{ name: string }>(sql`PRAGMA table_info(items)`);
+    if (!cols.some((c) => c.name === "on_calendar")) {
+      await db.run(sql`ALTER TABLE items ADD COLUMN on_calendar INTEGER NOT NULL DEFAULT 0`);
+      // 既存の項目は、予定と「日が一日に決まっているタスク」だけをカレンダーに残す
+      await db.run(sql`UPDATE items SET on_calendar = 1 WHERE kind = '予定' AND parent_id IS NULL
+        OR (kind = 'タスク' AND due_date IS NOT NULL AND start_date IS NULL AND recurrence IS NULL AND parent_id IS NULL)`);
+    }
   })().catch((e) => {
     ready = null; // 失敗した初期化を覚え続けず、次のリクエストでやり直す
     throw e;
@@ -62,7 +71,10 @@ async function tagIds(names: string[]) {
   return rows.map((r) => r.id);
 }
 
-export async function insertItem(c: ClassifiedItem, extra: { sourceText?: string; parentId?: number; linkedIds?: number[] } = {}) {
+export async function insertItem(
+  c: ClassifiedItem & { status?: Status },
+  extra: { sourceText?: string; parentId?: number; linkedIds?: number[] } = {},
+) {
   await ensureSchema();
   const now = new Date().toISOString();
   const [row] = await db
@@ -76,6 +88,8 @@ export async function insertItem(c: ClassifiedItem, extra: { sourceText?: string
       dueDate: c.dueDate,
       recurrence: c.recurrence,
       priority: c.priority,
+      onCalendar: c.onCalendar,
+      status: c.status ?? "未着手",
       parentId: extra.parentId ?? null,
       sourceText: extra.sourceText ?? null,
       linkedIds: extra.linkedIds ? JSON.stringify(extra.linkedIds) : null,
@@ -92,6 +106,8 @@ export async function insertItem(c: ClassifiedItem, extra: { sourceText?: string
       kind: c.kind === "予定" ? "タスク" : c.kind,
       tags: [],
       children: [],
+      status: "未着手",
+      onCalendar: false, // 親が載っていれば十分。子まで載せるとカレンダーが埋まる
       startDate: null,
       dueDate: c.kind === "予定" || c.kind === "タスク" ? c.dueDate : null,
     }, { parentId: row.id });
@@ -99,21 +115,106 @@ export async function insertItem(c: ClassifiedItem, extra: { sourceText?: string
   return row.id;
 }
 
-// 投げ込み → 分類 → 保存 → 日付つきなら接続を照合（仕様 §1, §4.1）
+const toKnown = (i: ItemView): Known => ({
+  id: i.id, title: i.title, kind: i.kind, folder: i.folder, status: i.status, parentId: i.parentId, dueDate: i.dueDate,
+});
+
+async function saveMessage(itemId: number | null, role: "user" | "assistant", text: string) {
+  await db.insert(messages).values({ itemId, role, text, createdAt: new Date().toISOString() });
+}
+
+export async function listMessages(itemId: number | null, limit = 100) {
+  await ensureSchema();
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(itemId === null ? sql`${messages.itemId} IS NULL` : eq(messages.itemId, itemId))
+    .orderBy(desc(messages.id))
+    .limit(limit);
+  return rows.reverse();
+}
+
+// AI の読み取りを DB に反映する。報告は既存項目の更新、新しい事柄だけを項目として足す
+async function apply(result: Interpretation, all: ItemView[], sourceText: string) {
+  const byId = new Map(all.map((i) => [i.id, i]));
+  const updated: number[] = [];
+  for (const u of result.updates) {
+    const it = byId.get(u.id);
+    if (!it) continue;
+    const patch: Partial<typeof items.$inferInsert> = {};
+    if (u.hold) Object.assign(patch, { startDate: null, dueDate: null, onCalendar: false });
+    if (u.dueDate) patch.dueDate = u.dueDate;
+    if (u.onCalendar !== null) patch.onCalendar = u.onCalendar;
+    if (u.note) patch.note = it.note ? `${it.note}\n${u.note}` : u.note;
+    if (u.status) {
+      // 親の状態は子から算出するので、親を完了と言われたら子をまとめて完了にする
+      if (it.childIds.length) {
+        if (u.status === "完了") await db.update(items).set({ status: "完了" }).where(inArray(items.id, it.childIds));
+      } else patch.status = u.status;
+    }
+    if (Object.keys(patch).length) await db.update(items).set(patch).where(eq(items.id, u.id));
+    updated.push(u.id);
+  }
+  const created: number[] = [];
+  for (const { parentId, ...c } of result.creates) {
+    const parent = parentId ? byId.get(parentId) : undefined;
+    // 2階層まで（仕様 §3.4）。孫になりそうなら親の親につける
+    const pid = parent ? parent.parentId ?? parent.id : undefined;
+    created.push(await insertItem(pid ? { ...c, children: [] } : c, { sourceText, parentId: pid }));
+  }
+  return { updated, created };
+}
+
+// 投げ込み → 読み取り（新規・報告・相談）→ 反映 → 新しく日付つきの項目が入ったら接続を照合（仕様 §1, §4.1）
 export async function dump(text: string) {
   await ensureSchema();
   const today = todayJST();
   const existing = (await db.select({ name: tags.name }).from(tags)).map((t) => t.name);
-  const result = await classify(text, existing, today);
-  const created: number[] = [];
-  for (const c of result.items) created.push(await insertItem(c, { sourceText: text }));
+  const all = await listItems();
+  const known = all.filter((i) => i.status !== "完了").slice(-300).map(toKnown);
+  await saveMessage(null, "user", text);
+  const result = await interpret(text, { today, tags: existing, known });
+  const { created, updated } = await apply(result, all, text);
+  await saveMessage(null, "assistant", result.reply);
 
   const newSuggestions = [];
   for (const id of created) {
     const [it] = await db.select().from(items).where(eq(items.id, id));
-    if (it.startDate || it.dueDate) newSuggestions.push(...(await runLinking(id)));
+    if (!it.parentId && (it.startDate || it.dueDate)) newSuggestions.push(...(await runLinking(id)));
   }
-  return { reply: result.reply, created, suggestions: newSuggestions };
+  return { reply: result.reply, created, updated, suggestions: newSuggestions };
+}
+
+// 項目ごとの相談チャット。基本は答えるだけで、報告や「足して」のときだけ項目を触る
+export async function chat(itemId: number, text: string) {
+  await ensureSchema();
+  const all = await listItems();
+  const focus = all.find((i) => i.id === itemId);
+  if (!focus) return null;
+  const existing = (await db.select({ name: tags.name }).from(tags)).map((t) => t.name);
+  const history = (await listMessages(itemId, 20)).map((m) => ({ role: m.role, text: m.text }));
+  const known = all.filter((i) => i.parentId === itemId).map(toKnown);
+  await saveMessage(itemId, "user", text);
+  const result = await interpret(text, {
+    today: todayJST(),
+    tags: existing,
+    known,
+    focus: { ...toKnown(focus), note: focus.note },
+    history,
+  });
+  // 相談中の項目の外は触らせない
+  const scope = new Set([itemId, ...focus.childIds]);
+  const { created, updated } = await apply(
+    {
+      ...result,
+      updates: result.updates.filter((u) => scope.has(u.id)),
+      creates: result.creates.map((c) => ({ ...c, parentId: c.parentId ?? itemId })),
+    },
+    all,
+    text,
+  );
+  await saveMessage(itemId, "assistant", result.reply);
+  return { reply: result.reply, created, updated };
 }
 
 // 日付つきの項目に差し込める、締切のない素材を照合する
@@ -170,6 +271,7 @@ export async function resolveSuggestion(id: number, action: "accept" | "dismiss"
       dueDate: s.dueDate,
       recurrence: null,
       priority: "青",
+      onCalendar: false,
       children: steps,
     },
     { linkedIds: [s.anchorId, ...materialIds] },
@@ -177,7 +279,10 @@ export async function resolveSuggestion(id: number, action: "accept" | "dismiss"
   return { id, taskId };
 }
 
-export async function updateItem(id: number, patch: Partial<Pick<typeof items.$inferInsert, "status" | "dueDate" | "folder" | "kind" | "title">>) {
+export async function updateItem(
+  id: number,
+  patch: Partial<Pick<typeof items.$inferInsert, "status" | "dueDate" | "startDate" | "folder" | "kind" | "title" | "onCalendar">>,
+) {
   await ensureSchema();
   await db.update(items).set(patch).where(eq(items.id, id));
 }
@@ -186,6 +291,7 @@ export async function deleteItem(id: number) {
   await ensureSchema();
   const ids = [id, ...(await db.select({ id: items.id }).from(items).where(eq(items.parentId, id))).map((r) => r.id)];
   await db.delete(itemTags).where(inArray(itemTags.itemId, ids));
+  await db.delete(messages).where(inArray(messages.itemId, ids));
   await db.delete(items).where(inArray(items.id, ids));
 }
 
