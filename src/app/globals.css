@@ -25,27 +25,3 @@ body {
   font-family: var(--font-geist-sans), "Hiragino Sans", "Noto Sans JP", sans-serif;
 }
 
-/* 投げ込み画面のキャラクター：ふわふわ揺れて、ときどきまばたき */
-.pet .pet-body {
-  animation: pet-bob 3s ease-in-out infinite;
-  transform-origin: 0 30px;
-}
-.pet .pet-eyes {
-  animation: pet-blink 5s infinite;
-  transform-origin: 0 -4px;
-}
-.pet:active .pet-body {
-  animation: none;
-  transform: scale(1.08, 0.92);
-}
-@keyframes pet-bob {
-  0%, 100% { transform: translateY(0) scale(1, 1); }
-  50% { transform: translateY(-3px) scale(0.98, 1.02); }
-}
-@keyframes pet-blink {
-  0%, 94%, 100% { transform: scaleY(1); }
-  97% { transform: scaleY(0.1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pet .pet-body, .pet .pet-eyes { animation: none; }
-}

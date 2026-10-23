@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, dbConfigError } from "./db";
 import { diary, itemTags, items, messages, suggestions, tags, type Folder, type Status } from "./schema";
-import { interpret, link, type ClassifiedItem, type Interpretation, type Known } from "./ai";
+import { interpret, link, shorten, type ClassifiedItem, type Interpretation, type Known } from "./ai";
 import { todayJST } from "./dates";
 import { SEED_SOURCE, seeds } from "./seed-data";
 
@@ -34,6 +34,7 @@ export function ensureSchema() {
       await db.run(sql`ALTER TABLE items ADD COLUMN start_time TEXT`);
       await db.run(sql`ALTER TABLE items ADD COLUMN end_time TEXT`);
     }
+    if (!cols.some((c) => c.name === "short_title")) await db.run(sql`ALTER TABLE items ADD COLUMN short_title TEXT`);
     const msgCols = await db.all<{ name: string }>(sql`PRAGMA table_info(messages)`);
     if (!msgCols.some((c) => c.name === "kind")) {
       await db.run(sql`ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'ack'`);
@@ -309,7 +310,7 @@ export async function updateItem(
   >,
 ) {
   await ensureSchema();
-  await db.update(items).set(patch).where(eq(items.id, id));
+  await db.update(items).set("title" in patch ? { ...patch, shortTitle: null } : patch).where(eq(items.id, id));
 }
 
 export async function deleteItem(id: number) {
@@ -367,4 +368,20 @@ export async function saveDiary(date: string, entry: { mood: number | null; text
     .insert(diary)
     .values({ date, ...entry, updatedAt })
     .onConflictDoUpdate({ target: diary.date, set: { ...entry, updatedAt } });
+}
+
+// 吹き出しに出す項目の短い一言を用意する。まだないものだけ AI にまとめさせて保存する
+export async function shortTitles(ids: number[]) {
+  await ensureSchema();
+  if (ids.length === 0) return {};
+  const rows = await db.select({ id: items.id, title: items.title, short: items.shortTitle }).from(items).where(inArray(items.id, ids));
+  const missing = rows.filter((r) => !r.short);
+  if (missing.length) {
+    const made = await shorten(missing.map((r) => ({ id: r.id, title: r.title })));
+    for (const r of missing) {
+      r.short = made[r.id] ?? null;
+      if (r.short) await db.update(items).set({ shortTitle: r.short }).where(eq(items.id, r.id));
+    }
+  }
+  return Object.fromEntries(rows.map((r) => [r.id, r.short ?? r.title]));
 }

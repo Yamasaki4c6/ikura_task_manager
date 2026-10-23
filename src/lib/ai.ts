@@ -200,6 +200,23 @@ function hhmm(t: string | null) {
 export type Material = { id: number; title: string; kind: string; folder: string; note: string | null; tags: string[] };
 export type Anchor = { id: number; title: string; folder: string; startDate: string | null; dueDate: string | null; note: string | null };
 
+const Shorts = z.object({ items: z.array(z.object({ id: z.number(), short: z.string().describe("12字以内の一言") })) });
+
+// 吹き出し用に、見出しを12字以内の一言にまとめる
+export async function shorten(list: { id: number; title: string }[]): Promise<Record<number, string>> {
+  const cut = (t: string) => t.split(/[（(：:／/、,]/)[0].trim().slice(0, 12);
+  if (!hasApiKey()) return Object.fromEntries(list.map((i) => [i.id, cut(i.title)]));
+  const response = await anthropic().messages.parse({
+    model: MODEL,
+    max_tokens: 1000,
+    output_config: { effort: "low", format: zodOutputFormat(Shorts) },
+    system: "タスクの見出しを、画面の吹き出しに出す短い一言（12字以内、体言止めか「〜する」）にまとめてください。固有名詞は残し、括弧の補足は落とします。",
+    messages: [{ role: "user", content: list.map((i) => `id=${i.id} ${i.title}`).join("\n") }],
+  });
+  const out = response.parsed_output?.items ?? [];
+  return Object.fromEntries(list.map((i) => [i.id, out.find((o) => o.id === i.id)?.short.slice(0, 16) || cut(i.title)]));
+}
+
 export async function link(anchor: Anchor, materials: Material[], today: string): Promise<LinkResult> {
   if (materials.length === 0) return { suggestions: [] };
   if (!hasApiKey()) return heuristicLink(anchor, materials);

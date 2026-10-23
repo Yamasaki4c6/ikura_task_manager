@@ -25,6 +25,8 @@ export const items = sqliteTable("items", {
   dueDate: text("due_date"),
   // HH:MM。時刻の決まった予定だけ。日は dueDate（なければ startDate）
   startTime: text("start_time"),
+  // キャラクターの吹き出し用の短い一言（AI がまとめて保存する）
+  shortTitle: text("short_title"),
   endTime: text("end_time"),
   // 例: "毎日" / "毎週月" など。null なら繰り返しなし
   recurrence: text("recurrence"),
