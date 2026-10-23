@@ -5,6 +5,8 @@ import type { Status } from "@/lib/schema";
 import { Calendar } from "./Calendar";
 import { Chat } from "./Chat";
 import { DayView } from "./DayView";
+import { Diary } from "./Diary";
+import { Pet } from "./Pet";
 import type { Msg } from "./Messages";
 import { Suggestions } from "./Suggestions";
 import { TaskList } from "./TaskList";
@@ -23,6 +25,9 @@ export function App() {
   const [pending, setPending] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
+  const [diaryOpen, setDiaryOpen] = useState(false);
+  // 今日の日記の気分（キャラクターの表情に使う）と、もう書いたか
+  const [todayDiary, setTodayDiary] = useState<{ mood: number | null; wrote: boolean }>({ mood: null, wrote: false });
   const [tab, setTab] = useState(2);
   // 「今日」はブラウザで決める。サーバー側で描かせるとプリレンダーと食い違う
   const [today, setToday] = useState<string | null>(null);
@@ -52,6 +57,10 @@ export function App() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 初回読み込み
     setToday(todayJST());
     refresh();
+    fetch(`/api/diary?date=${todayJST()}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => d.entry && setTodayDiary({ mood: d.entry.mood ?? null, wrote: Boolean(d.entry.text || d.entry.mood) }))
+      .catch(() => {});
     goTab(2, false);
   }, [refresh, goTab]);
 
@@ -112,7 +121,7 @@ export function App() {
           {today && <Calendar items={items} today={today} onSelect={select} onOpenDay={setOpenDay} />}
         </section>
         <section className="flex min-h-0 w-full shrink-0 snap-start snap-always flex-col md:w-auto">
-          <TaskList items={items} selectedId={selectedId} onSelect={select} onStatus={(id, status: Status) => patch(id, { status })} />
+          <TaskList items={items} today={today} selectedId={selectedId} onSelect={select} onStatus={(id, status: Status) => patch(id, { status })} />
         </section>
         <section className="flex min-h-0 w-full shrink-0 snap-start snap-always flex-col md:w-auto">
           {selected ? (
@@ -127,7 +136,27 @@ export function App() {
               onChanged={refresh}
             />
           ) : (
-            <Chat log={log} pending={pending} onDump={dump} aiEnabled={aiEnabled} onSeed={seeded ? null : seed} seeding={seeding} />
+            <Chat
+              log={log}
+              pending={pending}
+              onDump={dump}
+              aiEnabled={aiEnabled}
+              onSeed={seeded ? null : seed}
+              seeding={seeding}
+              pet={
+                today &&
+                !keyboard.open && (
+                  <Pet
+                    items={items}
+                    today={today}
+                    mood={todayDiary.mood}
+                    wroteDiary={todayDiary.wrote}
+                    onSelect={select}
+                    onOpenDiary={() => setDiaryOpen(true)}
+                  />
+                )
+              }
+            />
           )}
         </section>
       </main>
@@ -145,6 +174,13 @@ export function App() {
             await fetch("/api/items", { method: "POST", body: JSON.stringify(e) });
             await refresh();
           }}
+        />
+      )}
+      {diaryOpen && today && (
+        <Diary
+          today={today}
+          onClose={() => setDiaryOpen(false)}
+          onSaved={(date, mood) => date === today && setTodayDiary({ mood, wrote: true })}
         />
       )}
       {!keyboard.open && <Suggestions suggestions={suggestions} itemsById={itemsById} onResolve={resolve} />}
