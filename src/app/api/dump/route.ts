@@ -1,6 +1,6 @@
 import { dump } from "@/lib/store";
 
-// 分類と接続で Claude を2回呼ぶので、既定の実行時間では足りないことがある
+// 読み取りと接続で Claude を2回呼ぶので、既定の実行時間では足りないことがある
 export const maxDuration = 60;
 
 export async function POST(request: Request) {

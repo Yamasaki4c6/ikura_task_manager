@@ -1,5 +1,5 @@
 // ANTHROPIC_API_KEY が未設定のときの簡易版。画面の動作確認用で、精度は期待しない。
-import type { Anchor, ClassifyResult, LinkResult, Material } from "./ai";
+import type { Anchor, Interpretation, Known, LinkResult, Material, Turn } from "./ai";
 import type { Folder, Kind } from "./schema";
 import { addDays, weekday } from "./dates";
 
@@ -30,7 +30,7 @@ export function findDate(text: string, today: string): string | null {
   return null;
 }
 
-export function heuristicClassify(text: string, today: string): ClassifyResult {
+function heuristicCreate(text: string, today: string): Interpretation {
   const date = findDate(text, today);
   let kind: Kind = "タスク";
   if (date) kind = "予定";
@@ -38,8 +38,12 @@ export function heuristicClassify(text: string, today: string): ClassifyResult {
   else if (/できた|気づいた|思いついた|らしい|可能/.test(text)) kind = "アイデア";
   const folder = FOLDER_WORDS.find(([, re]) => re.test(text))?.[0] ?? "生活";
   return {
-    items: [
+    updates: [],
+    creates: [
       {
+        parentId: null,
+        status: "未着手",
+        onCalendar: kind === "予定",
         title: text.trim().split("\n")[0].slice(0, 40),
         note: null,
         kind,
@@ -55,6 +59,30 @@ export function heuristicClassify(text: string, today: string): ClassifyResult {
     reply: `${kind}／${folder}に置きました（簡易分類）`,
   };
 }
+
+const DONE = /完了|終わ|済ん|済み|できました/;
+
+export function heuristicInterpret(
+  text: string,
+  ctx: { today: string; known: Known[]; focus?: Known; history?: Turn[] },
+): Interpretation {
+  const none = { updates: [], creates: [] };
+  if (ctx.focus) {
+    if (DONE.test(text)) return { ...none, reply: "完了にしました（簡易判定）", updates: [done(ctx.focus.id)] };
+    return { ...none, reply: "簡易モードでは相談に答えられません。AI キーを設定してください。" };
+  }
+  if (DONE.test(text)) {
+    const words = bigrams(text);
+    const hit = ctx.known
+      .map((k) => ({ k, score: [...bigrams(k.title)].filter((g) => words.has(g)).length }))
+      .sort((a, b) => b.score - a.score)[0];
+    if (hit?.score) return { ...none, reply: `「${hit.k.title}」を完了にしました（簡易判定）`, updates: [done(hit.k.id)] };
+    return { ...none, reply: "どれが完了したか分かりませんでした" };
+  }
+  return heuristicCreate(text, ctx.today);
+}
+
+const done = (id: number) => ({ id, status: "完了" as const, hold: false, dueDate: null, onCalendar: null, note: null });
 
 // 2文字の重なりで素材を拾うだけの簡易版
 function bigrams(s: string) {

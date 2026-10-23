@@ -1,5 +1,6 @@
 import type { ItemView } from "@/lib/store";
 import type { suggestions } from "@/lib/schema";
+import type { Status } from "@/lib/schema";
 
 export type Item = ItemView;
 export type Suggestion = typeof suggestions.$inferSelect;
@@ -18,3 +19,5 @@ export const KIND_STYLE: Record<string, string> = {
   予定: "text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-950",
   タスク: "text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-950",
 };
+
+export type Patch = Partial<{ status: Status; dueDate: string | null; folder: string; onCalendar: boolean }>;

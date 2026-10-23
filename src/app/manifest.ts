@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 // ホーム画面に追加したとき、ブラウザの枠なしでアプリとして開くための設定
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "脳の拡張",
-    short_name: "脳の拡張",
+    name: "VertexPilot",
+    short_name: "VertexPilot",
     description: "投げ込むだけで整理・接続してくれるタスク管理",
     start_url: "/",
     display: "standalone",

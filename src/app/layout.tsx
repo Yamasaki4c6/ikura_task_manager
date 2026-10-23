@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "脳の拡張",
+  title: "VertexPilot",
   description: "投げ込むだけで整理・接続してくれるタスク管理",
-  appleWebApp: { capable: true, title: "脳の拡張", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "VertexPilot", statusBarStyle: "default" },
 };
 
 // スマホで入力欄にフォーカスしたとき勝手に拡大されないよう、また上部バーの色を揃える
