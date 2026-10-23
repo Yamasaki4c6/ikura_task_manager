@@ -16,6 +16,8 @@ const ClassifiedItem = z.object({
   tags: z.array(z.string()).describe("種別以外の属性タグ。既存タグを優先して再利用する"),
   startDate: z.string().nullable().describe("YYYY-MM-DD。期間の開始。なければ null"),
   dueDate: z.string().nullable().describe("YYYY-MM-DD。予定の日付や締切。なければ null"),
+  startTime: z.string().nullable().describe("HH:MM。時刻が本文にあるときだけ。なければ null"),
+  endTime: z.string().nullable().describe("HH:MM。終わりの時刻が分かるときだけ。なければ null"),
   recurrence: z.string().nullable().describe("習慣なら「毎日」「毎週月」など。なければ null"),
   priority: z.enum(PRIORITIES),
   onCalendar: z.boolean().describe("カレンダーに載せるか"),
@@ -41,6 +43,7 @@ export type ItemUpdate = z.infer<typeof ItemUpdate>;
 
 const Interpretation = z.object({
   reply: z.string().describe("利用者への返事"),
+  conversational: z.boolean().describe("相談・質問・深掘りへの会話としての返事なら true。登録や更新の報告だけなら false"),
   updates: z.array(ItemUpdate),
   creates: z.array(NewItem),
 });
@@ -78,6 +81,7 @@ const ITEM_RULES = `種別:
 項目のルール:
 - 一回の投げ込みに複数の事柄が含まれていれば分けて返す。
 - 締切のない願望・アイデアに締切を勝手に付けない。日付は本文に根拠があるときだけ入れる。
+- 「15時」「夜7時から2時間」など時刻があれば startTime / endTime に HH:MM で入れる。時刻つきの予定は onCalendar を true にする。
 - 「来週」「再来週」「冬休み」などの相対表現は、与えられた今日の日付から YYYY-MM-DD に直す。曖昧な期間は startDate と dueDate で幅を持たせる。
 - タグは既存タグの一覧にあるものを優先して使い、新規タグは本当に必要なときだけ作る。種別名やフォルダ名はタグにしない。
 - 子タスクは、明らかに複数の手順があるときだけ挙げる。`;
@@ -96,13 +100,16 @@ const DUMP_SYSTEM = `${ROLE}利用者は思いついたことを形式を問わ�
 - 終わったことで新しくやることが出てきたら、関係する項目の子か新しい項目として creates に足す。
 - 利用者がはっきり言っていない完了や変更はしない。
 
-reply: 登録や報告なら何をしたかを20字程度で。相談なら要点を短く答える。
+reply と conversational:
+- 登録や報告だけなら、何をしたかを20字程度で。conversational は false。
+- 相談・質問・深掘りには、話し相手として会話で答える。状況に寄り添い、考えを広げる問いかけや具体的な次の一手を添える。300字程度まで。見出しや太字などの記法は使わず、段落と改行で書く。conversational は true。
+- 登録しつつ相談にも答えるときは、会話の返事の中で登録したことに一言触れ、conversational は true。
 
 ${ITEM_RULES}`;
 
 const FOCUS_SYSTEM = `${ROLE}利用者は一つの項目（タスクやプロジェクト）について、専用の相談チャットで話しています。
 
-- 基本は相談相手として答える。進め方、分け方、次の一手、詰まりどころを、利用者の状況に合わせて具体的に。長くても200字程度。
+- 基本は相談相手として会話で答える。進め方、分け方、次の一手、詰まりどころを、利用者の状況に合わせて具体的に。300字程度まで。見出しや太字などの記法は使わず、段落と改行で書く。conversational は true。
 - 項目は勝手に増やさない。creates に足すのは、利用者が「足して」「タスクにして」と言ったときか、報告の結果として明らかに新しくやることが出てきたときだけ。足すときは原則この項目の子（parentId にこの項目の id）。
 - 「終わった」「ここまでできた」などの報告は updates で状態を更新する（この項目か、その子）。一部だけ終わったときは終わった子だけ完了にし、子がなければ終わった部分（完了）と残り（未着手）を子として足す。保留と言われたら hold を true。
 - 利用者がはっきり言っていない完了や変更はしない。
@@ -172,9 +179,22 @@ export async function interpret(
   const out = response.parsed_output;
   return {
     reply: out.reply,
+    conversational: out.conversational,
     updates: out.updates.filter((u) => ids.has(u.id)),
-    creates: out.creates.map((c) => ({ ...c, parentId: c.parentId && ids.has(c.parentId) ? c.parentId : null })),
+    creates: out.creates.map((c) => ({
+      ...c,
+      parentId: c.parentId && ids.has(c.parentId) ? c.parentId : null,
+      startTime: hhmm(c.startTime),
+      endTime: hhmm(c.endTime),
+    })),
   };
+}
+
+// "9:00" や "21:30" を "09:00" の形にそろえる。読めなければ null
+function hhmm(t: string | null) {
+  const m = t?.match(/^(\d{1,2}):(\d{2})/);
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+  return `${m[1].padStart(2, "0")}:${m[2]}`;
 }
 
 export type Material = { id: number; title: string; kind: string; folder: string; note: string | null; tags: string[] };

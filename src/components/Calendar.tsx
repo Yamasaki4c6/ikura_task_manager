@@ -1,43 +1,29 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, weekday } from "@/lib/dates";
+import { onDay, WD } from "./days";
 import { PRIORITY_COLOR, type Item } from "./types";
 
-const WD = "日月火水木金土";
 const WEEKS_BEFORE = 26; // 今週より前に何週ぶん並べるか
 const WEEKS_AFTER = 78;
 const ROWS = 6; // 画面に見える週の数
-const LONG_SPAN = 7; // これより長い期間ものは、毎日ではなく始まりと終わりの日にだけ載せる
-
-const spanDays = (it: Item) =>
-  it.startDate && it.dueDate ? (Date.parse(it.dueDate) - Date.parse(it.startDate)) / 86_400_000 + 1 : 1;
-
-// その日に載せる項目か。カレンダーに載せる指定のものだけ。期間・繰り返し（毎日／毎週X）も見る
-function onDay(item: Item, day: string): "on" | "start" | "end" | null {
-  if (!item.onCalendar || item.status === "完了") return null;
-  const r = item.recurrence;
-  if (r) {
-    if (item.startDate && day < item.startDate) return null;
-    if (item.dueDate && day > item.dueDate) return null;
-    if (r.includes("毎日")) return "on";
-    const m = r.match(/毎週([日月火水木金土]+)/);
-    if (m) return m[1].includes(WD[weekday(day)]) ? "on" : null;
-  }
-  if (item.startDate && item.dueDate && item.startDate !== item.dueDate) {
-    if (day < item.startDate || day > item.dueDate) return null;
-    if (spanDays(item) <= LONG_SPAN) return "on";
-    return day === item.startDate ? "start" : day === item.dueDate ? "end" : null;
-  }
-  return (item.dueDate ?? item.startDate) === day ? "on" : null;
-}
-
 function monthOf(base: string, n: number) {
   const [y, m] = base.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7);
 }
 
 // 週を縦に並べ、慣性スクロールで自由に流す。月の切れ目で止めない
-export function Calendar({ items, today, onSelect }: { items: Item[]; today: string; onSelect: (id: number) => void }) {
+export function Calendar({
+  items,
+  today,
+  onSelect,
+  onOpenDay,
+}: {
+  items: Item[];
+  today: string;
+  onSelect: (id: number) => void;
+  onOpenDay: (day: string) => void;
+}) {
   const firstDay = addDays(today, -weekday(today) - WEEKS_BEFORE * 7);
   const weeks = useMemo(
     () => Array.from({ length: WEEKS_BEFORE + WEEKS_AFTER + 1 }, (_, w) => Array.from({ length: 7 }, (_, d) => addDays(firstDay, w * 7 + d))),
@@ -87,13 +73,16 @@ export function Calendar({ items, today, onSelect }: { items: Item[]; today: str
               // 子は親と同じ日なら親だけ載せる
               const list = shown
                 .map((it) => ({ it, mark: onDay(it, day) }))
-                .filter(({ it, mark }) => mark && !(it.parentId && byId.get(it.parentId) && onDay(byId.get(it.parentId)!, day)));
+                .filter(({ it, mark }) => mark && !(it.parentId && byId.get(it.parentId) && onDay(byId.get(it.parentId)!, day)))
+                .sort((a, b) => (a.it.startTime ?? "").localeCompare(b.it.startTime ?? ""));
               // 月の境目が分かるよう、偶数月を薄く塗り分ける
               const even = Number(day.slice(5, 7)) % 2 === 0;
               return (
+                // 日付のマスを押すと、その日の時間表を開く
                 <div
                   key={day}
-                  className={`min-h-0 overflow-hidden border-t border-l border-neutral-200 p-0.5 dark:border-neutral-800 ${even ? "bg-neutral-50 dark:bg-neutral-900" : ""} ${day.startsWith(month) ? "" : "text-neutral-400"}`}
+                  onClick={() => onOpenDay(day)}
+                  className={`min-h-0 cursor-pointer overflow-hidden border-t border-l border-neutral-200 p-0.5 dark:border-neutral-800 ${even ? "bg-neutral-50 dark:bg-neutral-900" : ""} ${day.startsWith(month) ? "" : "text-neutral-400"}`}
                 >
                   <div className={`text-xs ${day === today ? "inline-block rounded-full bg-neutral-900 px-1.5 text-white dark:bg-neutral-100 dark:text-neutral-900" : ""}`}>
                     {day.endsWith("-01") ? <b>{Number(day.slice(5, 7))}/1</b> : Number(day.slice(8))}
@@ -101,12 +90,16 @@ export function Calendar({ items, today, onSelect }: { items: Item[]; today: str
                   {list.slice(0, 3).map(({ it, mark }) => (
                     <button
                       key={it.id}
-                      onClick={() => onSelect(it.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelect(it.id);
+                      }}
                       className={`mt-0.5 block w-full truncate rounded px-0.5 text-left text-[10px] leading-4 text-white md:text-[11px] ${PRIORITY_COLOR[it.priority]}`}
                       title={it.title}
                     >
                       {mark === "start" && "▶"}
                       {mark === "end" && "〆"}
+                      {it.startTime && <span className="opacity-80">{it.startTime.replace(/^0/, "")} </span>}
                       {it.title}
                     </button>
                   ))}

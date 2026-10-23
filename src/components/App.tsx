@@ -4,6 +4,7 @@ import { todayJST } from "@/lib/dates";
 import type { Status } from "@/lib/schema";
 import { Calendar } from "./Calendar";
 import { Chat } from "./Chat";
+import { DayView } from "./DayView";
 import type { Msg } from "./Messages";
 import { Suggestions } from "./Suggestions";
 import { TaskList } from "./TaskList";
@@ -21,6 +22,7 @@ export function App() {
   const [log, setLog] = useState<Msg[]>([]);
   const [pending, setPending] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [openDay, setOpenDay] = useState<string | null>(null);
   const [tab, setTab] = useState(2);
   // 「今日」はブラウザで決める。サーバー側で描かせるとプリレンダーと食い違う
   const [today, setToday] = useState<string | null>(null);
@@ -107,7 +109,7 @@ export function App() {
         className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] md:grid md:snap-none md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] md:divide-x md:divide-neutral-200 md:overflow-hidden dark:md:divide-neutral-800"
       >
         <section className="flex min-h-0 w-full shrink-0 snap-start snap-always flex-col md:w-auto">
-          {today && <Calendar items={items} today={today} onSelect={select} />}
+          {today && <Calendar items={items} today={today} onSelect={select} onOpenDay={setOpenDay} />}
         </section>
         <section className="flex min-h-0 w-full shrink-0 snap-start snap-always flex-col md:w-auto">
           <TaskList items={items} selectedId={selectedId} onSelect={select} onStatus={(id, status: Status) => patch(id, { status })} />
@@ -129,6 +131,22 @@ export function App() {
           )}
         </section>
       </main>
+      {openDay && today && (
+        <DayView
+          day={openDay}
+          today={today}
+          items={items}
+          onClose={() => setOpenDay(null)}
+          onSelect={(id) => {
+            setOpenDay(null);
+            select(id);
+          }}
+          onCreate={async (e) => {
+            await fetch("/api/items", { method: "POST", body: JSON.stringify(e) });
+            await refresh();
+          }}
+        />
+      )}
       {!keyboard.open && <Suggestions suggestions={suggestions} itemsById={itemsById} onResolve={resolve} />}
       <nav className={`relative grid-cols-3 border-t border-neutral-200 pb-[env(safe-area-inset-bottom)] md:hidden dark:border-neutral-800 ${keyboard.open ? "hidden" : "grid"}`}>
         {TABS.map((label, i) => (

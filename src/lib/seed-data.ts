@@ -8,6 +8,8 @@ const S = (s: Seed): ClassifiedItem => ({
   startDate: null,
   dueDate: null,
   recurrence: null,
+  startTime: null,
+  endTime: null,
   priority: s.kind === "予定" ? "赤" : s.kind === "タスク" ? "青" : "灰",
   children: [],
   // 予定と、日付が一日に決まっているタスクだけカレンダーに載せる

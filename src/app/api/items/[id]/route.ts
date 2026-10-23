@@ -10,6 +10,8 @@ const Patch = z
     dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
     onCalendar: z.boolean(),
+    startTime: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
+    endTime: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
     folder: z.enum(FOLDERS),
     kind: z.enum(KINDS),
     title: z.string().min(1),
