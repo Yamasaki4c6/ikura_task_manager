@@ -10,6 +10,7 @@ export function Chat({
   aiEnabled,
   onSeed,
   seeding,
+  pet,
 }: {
   log: Msg[];
   pending: boolean;
@@ -17,9 +18,12 @@ export function Chat({
   aiEnabled: boolean;
   onSeed: (() => void) | null;
   seeding: boolean;
+  pet?: React.ReactNode;
 }) {
   return (
     <div className="flex h-full flex-col">
+      {/* 上の5分の2ほどにキャラクター。キーボードが出ている間は隠す */}
+      {pet && <div className="h-[38%] max-h-72 shrink-0 md:h-48">{pet}</div>}
       <Messages log={log} pending={pending} empty="思いついたこと、終わったこと、相談したいことを、そのまま投げ込んでください。">
         {!aiEnabled && (
           <p className="rounded bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">

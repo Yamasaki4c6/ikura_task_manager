@@ -74,3 +74,11 @@ export const messages = sqliteTable("messages", {
   kind: text("kind").$type<"ack" | "chat">().notNull().default("ack"),
   createdAt: text("created_at").notNull(),
 });
+
+// 1日1件の日記。mood は 1（つらい）〜 5（よい）。null は未選択
+export const diary = sqliteTable("diary", {
+  date: text("date").primaryKey(),
+  mood: integer("mood"),
+  text: text("text").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+});

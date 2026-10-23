@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, dbConfigError } from "./db";
-import { itemTags, items, messages, suggestions, tags, type Folder, type Status } from "./schema";
+import { diary, itemTags, items, messages, suggestions, tags, type Folder, type Status } from "./schema";
 import { interpret, link, type ClassifiedItem, type Interpretation, type Known } from "./ai";
 import { todayJST } from "./dates";
 import { SEED_SOURCE, seeds } from "./seed-data";
@@ -21,6 +21,8 @@ export function ensureSchema() {
       task_title TEXT NOT NULL, due_date TEXT, steps TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)`);
     await db.run(sql`CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER, role TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL)`);
+    await db.run(sql`CREATE TABLE IF NOT EXISTS diary (
+      date TEXT PRIMARY KEY, mood INTEGER, text TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)`);
     const cols = await db.all<{ name: string }>(sql`PRAGMA table_info(items)`);
     if (!cols.some((c) => c.name === "on_calendar")) {
       await db.run(sql`ALTER TABLE items ADD COLUMN on_calendar INTEGER NOT NULL DEFAULT 0`);
@@ -350,4 +352,19 @@ export async function createEvent(e: { title: string; date: string; startTime: s
     onCalendar: true,
     children: [],
   });
+}
+
+export async function getDiary(date: string) {
+  await ensureSchema();
+  const [row] = await db.select().from(diary).where(eq(diary.date, date));
+  return row ?? null;
+}
+
+export async function saveDiary(date: string, entry: { mood: number | null; text: string }) {
+  await ensureSchema();
+  const updatedAt = new Date().toISOString();
+  await db
+    .insert(diary)
+    .values({ date, ...entry, updatedAt })
+    .onConflictDoUpdate({ target: diary.date, set: { ...entry, updatedAt } });
 }
