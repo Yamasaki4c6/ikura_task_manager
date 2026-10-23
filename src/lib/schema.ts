@@ -23,6 +23,9 @@ export const items = sqliteTable("items", {
   // YYYY-MM-DD。締切なしの素材は null のまま寝かせる（仕様 §8）
   startDate: text("start_date"),
   dueDate: text("due_date"),
+  // HH:MM。時刻の決まった予定だけ。日は dueDate（なければ startDate）
+  startTime: text("start_time"),
+  endTime: text("end_time"),
   // 例: "毎日" / "毎週月" など。null なら繰り返しなし
   recurrence: text("recurrence"),
   priority: text("priority").$type<Priority>().notNull().default("青"),
@@ -68,5 +71,6 @@ export const messages = sqliteTable("messages", {
   itemId: integer("item_id"),
   role: text("role").$type<"user" | "assistant">().notNull(),
   text: text("text").notNull(),
+  kind: text("kind").$type<"ack" | "chat">().notNull().default("ack"),
   createdAt: text("created_at").notNull(),
 });

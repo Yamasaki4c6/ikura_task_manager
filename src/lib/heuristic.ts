@@ -52,11 +52,14 @@ function heuristicCreate(text: string, today: string): Interpretation {
         startDate: null,
         dueDate: date,
         recurrence: null,
+        startTime: null,
+        endTime: null,
         priority: kind === "予定" ? "赤" : kind === "タスク" ? "青" : "灰",
         children: [],
       },
     ],
     reply: `${kind}／${folder}に置きました（簡易分類）`,
+    conversational: false,
   };
 }
 
@@ -66,7 +69,7 @@ export function heuristicInterpret(
   text: string,
   ctx: { today: string; known: Known[]; focus?: Known; history?: Turn[] },
 ): Interpretation {
-  const none = { updates: [], creates: [] };
+  const none = { updates: [], creates: [], conversational: false };
   if (ctx.focus) {
     if (DONE.test(text)) return { ...none, reply: "完了にしました（簡易判定）", updates: [done(ctx.focus.id)] };
     return { ...none, reply: "簡易モードでは相談に答えられません。AI キーを設定してください。" };

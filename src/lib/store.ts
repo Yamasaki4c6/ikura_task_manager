@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, dbConfigError } from "./db";
-import { itemTags, items, messages, suggestions, tags, type Status } from "./schema";
+import { itemTags, items, messages, suggestions, tags, type Folder, type Status } from "./schema";
 import { interpret, link, type ClassifiedItem, type Interpretation, type Known } from "./ai";
 import { todayJST } from "./dates";
 import { SEED_SOURCE, seeds } from "./seed-data";
@@ -27,6 +27,20 @@ export function ensureSchema() {
       // 既存の項目は、予定と「日が一日に決まっているタスク」だけをカレンダーに残す
       await db.run(sql`UPDATE items SET on_calendar = 1 WHERE kind = '予定' AND parent_id IS NULL
         OR (kind = 'タスク' AND due_date IS NOT NULL AND start_date IS NULL AND recurrence IS NULL AND parent_id IS NULL)`);
+    }
+    if (!cols.some((c) => c.name === "start_time")) {
+      await db.run(sql`ALTER TABLE items ADD COLUMN start_time TEXT`);
+      await db.run(sql`ALTER TABLE items ADD COLUMN end_time TEXT`);
+    }
+    const msgCols = await db.all<{ name: string }>(sql`PRAGMA table_info(messages)`);
+    if (!msgCols.some((c) => c.name === "kind")) {
+      await db.run(sql`ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'ack'`);
+      // 投げ込み履歴を残し始める前の投げ込みも、項目の原文から履歴に戻す
+      await db.run(sql`INSERT INTO messages (item_id, role, text, created_at, kind)
+        SELECT NULL, 'user', source_text, MIN(created_at), 'ack' FROM items
+        WHERE source_text IS NOT NULL AND source_text <> ${SEED_SOURCE} AND parent_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.item_id IS NULL AND m.role = 'user' AND m.text = items.source_text)
+        GROUP BY source_text`);
     }
   })().catch((e) => {
     ready = null; // 失敗した初期化を覚え続けず、次のリクエストでやり直す
@@ -86,6 +100,8 @@ export async function insertItem(
       folder: c.folder,
       startDate: c.startDate,
       dueDate: c.dueDate,
+      startTime: c.startTime,
+      endTime: c.endTime,
       recurrence: c.recurrence,
       priority: c.priority,
       onCalendar: c.onCalendar,
@@ -107,6 +123,8 @@ export async function insertItem(
       tags: [],
       children: [],
       status: "未着手",
+      startTime: null,
+      endTime: null,
       onCalendar: false, // 親が載っていれば十分。子まで載せるとカレンダーが埋まる
       startDate: null,
       dueDate: c.kind === "予定" || c.kind === "タスク" ? c.dueDate : null,
@@ -119,17 +137,18 @@ const toKnown = (i: ItemView): Known => ({
   id: i.id, title: i.title, kind: i.kind, folder: i.folder, status: i.status, parentId: i.parentId, dueDate: i.dueDate,
 });
 
-async function saveMessage(itemId: number | null, role: "user" | "assistant", text: string) {
-  await db.insert(messages).values({ itemId, role, text, createdAt: new Date().toISOString() });
+// kind: 'ack' は登録・更新の一言、'chat' は相談への返事（吹き出しで出す）
+async function saveMessage(itemId: number | null, role: "user" | "assistant", text: string, kind: "ack" | "chat" = "ack") {
+  await db.insert(messages).values({ itemId, role, text, kind, createdAt: new Date().toISOString() });
 }
 
-export async function listMessages(itemId: number | null, limit = 100) {
+export async function listMessages(itemId: number | null, limit = 200) {
   await ensureSchema();
   const rows = await db
     .select()
     .from(messages)
     .where(itemId === null ? sql`${messages.itemId} IS NULL` : eq(messages.itemId, itemId))
-    .orderBy(desc(messages.id))
+    .orderBy(desc(messages.createdAt), desc(messages.id))
     .limit(limit);
   return rows.reverse();
 }
@@ -175,14 +194,14 @@ export async function dump(text: string) {
   await saveMessage(null, "user", text);
   const result = await interpret(text, { today, tags: existing, known });
   const { created, updated } = await apply(result, all, text);
-  await saveMessage(null, "assistant", result.reply);
+  await saveMessage(null, "assistant", result.reply, result.conversational ? "chat" : "ack");
 
   const newSuggestions = [];
   for (const id of created) {
     const [it] = await db.select().from(items).where(eq(items.id, id));
     if (!it.parentId && (it.startDate || it.dueDate)) newSuggestions.push(...(await runLinking(id)));
   }
-  return { reply: result.reply, created, updated, suggestions: newSuggestions };
+  return { reply: result.reply, conversational: result.conversational, created, updated, suggestions: newSuggestions };
 }
 
 // 項目ごとの相談チャット。基本は答えるだけで、報告や「足して」のときだけ項目を触る
@@ -213,7 +232,7 @@ export async function chat(itemId: number, text: string) {
     all,
     text,
   );
-  await saveMessage(itemId, "assistant", result.reply);
+  await saveMessage(itemId, "assistant", result.reply, "chat");
   return { reply: result.reply, created, updated };
 }
 
@@ -272,6 +291,8 @@ export async function resolveSuggestion(id: number, action: "accept" | "dismiss"
       recurrence: null,
       priority: "青",
       onCalendar: false,
+      startTime: null,
+      endTime: null,
       children: steps,
     },
     { linkedIds: [s.anchorId, ...materialIds] },
@@ -281,7 +302,9 @@ export async function resolveSuggestion(id: number, action: "accept" | "dismiss"
 
 export async function updateItem(
   id: number,
-  patch: Partial<Pick<typeof items.$inferInsert, "status" | "dueDate" | "startDate" | "folder" | "kind" | "title" | "onCalendar">>,
+  patch: Partial<
+    Pick<typeof items.$inferInsert, "status" | "dueDate" | "startDate" | "startTime" | "endTime" | "folder" | "kind" | "title" | "onCalendar">
+  >,
 ) {
   await ensureSchema();
   await db.update(items).set(patch).where(eq(items.id, id));
@@ -308,4 +331,23 @@ export async function seedInitial() {
   if (await isSeeded()) return 0;
   for (const s of seeds) await insertItem(s, { sourceText: SEED_SOURCE });
   return seeds.length;
+}
+
+// 日表示から時間を指定して予定を入れる
+export async function createEvent(e: { title: string; date: string; startTime: string | null; endTime: string | null; folder: Folder }) {
+  return insertItem({
+    title: e.title,
+    note: null,
+    kind: "予定",
+    folder: e.folder,
+    tags: [],
+    startDate: null,
+    dueDate: e.date,
+    startTime: e.startTime,
+    endTime: e.endTime,
+    recurrence: null,
+    priority: "青",
+    onCalendar: true,
+    children: [],
+  });
 }

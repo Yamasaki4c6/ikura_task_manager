@@ -20,4 +20,11 @@ export const KIND_STYLE: Record<string, string> = {
   タスク: "text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-950",
 };
 
-export type Patch = Partial<{ status: Status; dueDate: string | null; folder: string; onCalendar: boolean }>;
+export type Patch = Partial<{
+  status: Status;
+  dueDate: string | null;
+  folder: string;
+  onCalendar: boolean;
+  startTime: string | null;
+  endTime: string | null;
+}>;

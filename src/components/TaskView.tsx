@@ -87,6 +87,23 @@ export function TaskView({
                 onChange={(e) => onPatch(item.id, { dueDate: e.target.value || null })}
                 className={field}
               />
+              <span className="flex items-center gap-1">
+                <input
+                  type="time"
+                  value={item.startTime ?? ""}
+                  onChange={(e) => onPatch(item.id, { startTime: e.target.value || null })}
+                  className={field}
+                  aria-label="開始時刻"
+                />
+                〜
+                <input
+                  type="time"
+                  value={item.endTime ?? ""}
+                  onChange={(e) => onPatch(item.id, { endTime: e.target.value || null })}
+                  className={field}
+                  aria-label="終了時刻"
+                />
+              </span>
               <select
                 value={item.status}
                 disabled={item.childIds.length > 0}
@@ -138,7 +155,7 @@ export function TaskView({
         )}
       </div>
 
-      <Messages log={log} pending={pending} empty="この項目について相談できます。進め方、分け方、詰まっていること、終わった報告など。" />
+      <Messages log={log} pending={pending} allChat empty="この項目について相談できます。進め方、分け方、詰まっていること、終わった報告など。" />
       <Composer onSend={send} disabled={pending} placeholder="この項目について相談する" />
     </div>
   );
