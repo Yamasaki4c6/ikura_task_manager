@@ -54,14 +54,35 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    // 開きっぱなしのまま日をまたいでも、画面に戻ったときと1分ごとに日付を確かめ、変わっていたら読み直す。
+    // スマホはタブを裏に回しても再読み込みしないので、初回だけ決めると前の日のまま残る
+    let day = "";
+    const check = (force = false) => {
+      const now = todayJST();
+      if (now === day && !force) return;
+      day = now;
+      setToday(now);
+      setTodayDiary({ mood: null, wrote: false });
+      fetch(`/api/diary?date=${now}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => d.entry && setTodayDiary({ mood: d.entry.mood ?? null, wrote: Boolean(d.entry.text || d.entry.mood) }))
+        .catch(() => {});
+    };
+    check();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 初回読み込み
-    setToday(todayJST());
     refresh();
-    fetch(`/api/diary?date=${todayJST()}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => d.entry && setTodayDiary({ mood: d.entry.mood ?? null, wrote: Boolean(d.entry.text || d.entry.mood) }))
-      .catch(() => {});
     goTab(2, false);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      check();
+      refresh();
+    };
+    const id = setInterval(() => check(), 60_000);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refresh, goTab]);
 
   const itemsById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);

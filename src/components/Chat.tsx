@@ -1,4 +1,6 @@
 "use client";
+import { dumpTranscript } from "./claude";
+import { ClaudeButton } from "./ClaudeButton";
 import { Composer } from "./Composer";
 import { Messages, type Msg } from "./Messages";
 
@@ -24,6 +26,10 @@ export function Chat({
     <div className="flex h-full flex-col">
       {/* 上の5分の2ほどにキャラクター。キーボードが出ている間は隠す */}
       {pet && <div className="h-[38%] max-h-72 shrink-0 md:h-48">{pet}</div>}
+      {/* 投げ込み欄で相談した分があれば、Claude アプリへ続きを持っていける */}
+      <div className="flex justify-end px-3 pt-1 empty:hidden">
+        <ClaudeButton text={dumpTranscript(log)} />
+      </div>
       <Messages log={log} pending={pending} empty="思いついたこと、終わったこと、相談したいことを、そのまま投げ込んでください。">
         {!aiEnabled && (
           <p className="rounded bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
