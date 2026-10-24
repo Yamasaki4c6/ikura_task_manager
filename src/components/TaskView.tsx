@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { FOLDERS, STATUSES, type Status } from "@/lib/schema";
+import { itemTranscript } from "./claude";
+import { ClaudeButton } from "./ClaudeButton";
 import { Composer } from "./Composer";
 import { Messages, type Msg } from "./Messages";
 import { KIND_STYLE, type Item, type Patch } from "./types";
@@ -69,6 +71,7 @@ export function TaskView({
               {item.title}
             </h3>
           </div>
+          <ClaudeButton text={itemTranscript(item, children, log)} className="shrink-0" />
           <button onClick={() => setShowDetail((v) => !v)} className="shrink-0 text-xs text-neutral-500">
             {showDetail ? "閉じる" : "編集"}
           </button>
